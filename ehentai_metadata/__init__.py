@@ -1,7 +1,13 @@
 #!/usr/bin/env python2
 # vim:fileencoding=UTF-8:ts=4:sw=4:sta:et:sts=4:ai
+from __future__ import (unicode_literals, division, absolute_import,
+                        print_function)
 
-from calibre.ebooks.metadata.sources.base import Source
+__license__   = 'GPL v3'
+__copyright__ = '2017, Wu Yuan <i@a3s.site>'
+__docformat__ = 'restructuredtext en'
+
+from calibre.ebooks.metadata.sources.base import Source, Option
 from calibre.ebooks.metadata.book.base import Metadata
 from calibre import as_unicode
 
@@ -9,9 +15,7 @@ import re
 import json
 from urllib import urlencode
 
-from calibre.rpdb import set_trace
-
-def to_metadata(log,gmetadata):
+def to_metadata(log,gmetadata): # {{{
     title = gmetadata['title']
     title_jpn = gmetadata['title_jpn']
     tags = gmetadata['tags']
@@ -34,6 +38,7 @@ def to_metadata(log,gmetadata):
     else:
         title_ = raw_title.strip()
         author = 'Unknown'
+        log.exception('Title match failed. Title is %s' % raw_title)
     
     authors = [(author)]
         
@@ -47,6 +52,7 @@ def to_metadata(log,gmetadata):
         mi.publisher = publisher
     else:
         mi.publisher = 'Unknown'
+        log.exception('Not Found publisher.')
 
     # Tags
     tags_ = []
@@ -58,6 +64,10 @@ def to_metadata(log,gmetadata):
             else:
                 tags_.append(tag_)
         elif re.match('parody|group|character|artist', tag):
+            log('drop tag %s' % tag)
+            continue
+        elif not ':' in tag:
+            log('drop tag %s' % tag)
             continue
         else:
             tags_.append(tag)
@@ -72,29 +82,62 @@ def to_metadata(log,gmetadata):
     if thumb:
         mi.has_ehentai_cover = thumb
     return mi
+    # }}}
 
 class Ehentai(Source):
     
     name = 'E-hentai Galleries'
     author = 'Wu yuan'
-    version = (1,0,0)
+    version = (1,1,0)
     minimum_calibre_version = (2, 80, 0)
     
     description = _('Download metadata and cover from e-hentai.org.'
                    'Useful only for doujinshi.')
     
     capabilities = frozenset(['identify', 'cover'])
-    touched_fields = frozenset(['title','authors','tags','rating','identifier:ehentai','publisher'])
+    touched_fields = frozenset(['title','authors','tags','rating','publisher','identifier:ehentai'])
     supports_gzip_transfer_encoding = True
     cached_cover_url_is_reliable = True
     
     EHentai_url = 'https://e-hentai.org/g/%s/%s/'
     ExHentai_url = 'https://exhentai.org/g/%s/%s/'
     
-    ExHentai_Status = False
-    ExHentai_Cookies = [{'name':'igneous', 'value':'16577165721', 'domain':'.exhentai.org', 'path':'/'}]
+    options = (
+        Option('Use_Exhentai','bool',False,_('Use Exhentai'),
+               _('If Use Exhentai is True, the plugin will search metadata on exhentai.')),
+        Option('ipb_member_id','string',None,_('ipb_member_id'),
+               _('If Use Exhentai is True, please input your cookies.')),
+        Option('ipb_pass_hash','string',None,_('ipb_pass_hash'),
+               _('If Use Exhentai is True, please input your cookies.'))
+               )
     
-    def create_query(self,log,title=None, authors=None,identifiers={},is_exhentai=False):
+    config_help_message = ('<p>'+_('To Download Metadata from exhentai.org you must sign up'
+                            ' a free account and get the cookies of .exhentai.org.'
+                            ' If you don\'t have an account, you can <a href="%s">sign up</a>.')) % 'https://forums.e-hentai.org/index.php'
+    
+    def __init__(self, *args, **kwargs): # {{{
+        Source.__init__(self, *args, **kwargs)
+        self.config_exhentai()
+    # }}}
+
+    def config_exhentai(self): # {{{
+        
+        ExHentai_Status = self.prefs['Use_Exhentai']
+        ExHentai_Cookies = [{'name':'ipb_member_id', 'value':self.prefs['ipb_member_id'], 'domain':'.exhentai.org', 'path':'/'},
+                            {'name':'ipb_pass_hash', 'value':self.prefs['ipb_pass_hash'], 'domain':'.exhentai.org', 'path':'/'}]
+        
+        if ExHentai_Status is True:
+            for cookie in ExHentai_Cookies:
+                if cookie['value'] is None:
+                    ExHentai_Status = False
+                    break
+        
+        self.ExHentai_Status = ExHentai_Status
+        self.ExHentai_Cookies = ExHentai_Cookies
+        return
+    # }}}
+    
+    def create_query(self,log,title=None, authors=None,identifiers={},is_exhentai=False): # {{{
                 
         EHentai_SEARCH_URL = 'https://e-hentai.org/?'
         ExHentai_SEARCH_URL = 'https://exhentai.org/?'
@@ -123,8 +166,9 @@ class Ehentai(Source):
         else:
             url = ExHentai_SEARCH_URL + urlencode(q_dict)
         return url
+    # }}}
     
-    def get_gallery_info(self,log,raw):
+    def get_gallery_info(self,log,raw): # {{{
         
         pattern = re.compile(r'https:\/\/(?:e-hentai\.org|exhentai\.org)\/g\/(?P<gallery_id>\d+)/(?P<gallery_token>\w+)/')
         results = re.findall(pattern,raw)
@@ -135,8 +179,9 @@ class Ehentai(Source):
         for r in results:
             gidlist.append(list(r))
         return gidlist
+    # }}}
     
-    def get_all_details(self,gidlist,log,abort,result_queue,timeout):
+    def get_all_details(self,gidlist,log,abort,result_queue,timeout): # {{{
         
         EHentai_API_url = 'https://api.e-hentai.org/api.php'
         br = self.browser
@@ -162,8 +207,9 @@ class Ehentai(Source):
                 log.exception('Failed to get metadata for identify entry:',gmetadata)
             if abort.is_set():
                 break
+    # }}}
     
-    def get_book_url(self, identifiers):
+    def get_book_url(self, identifiers): # {{{
         
         db = identifiers.get('ehentai',None)
         if db is not None:
@@ -172,9 +218,10 @@ class Ehentai(Source):
                 url = self.ExHentai_url % (gid,token)
             else:
                 url = self.EHentai_url % (gid,token)
-            return ('ehentai',db,url)
+            return ('ehentai', db, url)
+    # }}}
 
-    def download_cover(self, log, result_queue, abort,title=None, authors=None, identifiers={}, timeout=30, get_best_cover=False):
+    def download_cover(self, log, result_queue, abort,title=None, authors=None, identifiers={}, timeout=30, get_best_cover=False): # {{{
 
         cached_url = self.get_cached_cover_url(identifiers)
         if cached_url is None:
@@ -189,8 +236,9 @@ class Ehentai(Source):
                 result_queue.put((self, cdata))
         except:
             log.exception('Failed to download cover from:', cached_url)
+    # }}}
 
-    def get_cached_cover_url(self, identifiers):
+    def get_cached_cover_url(self, identifiers): # {{{
         
         url = None
         db = identifiers.get('ehentai',None)
@@ -199,8 +247,9 @@ class Ehentai(Source):
         if db is not None:
             url = self.cached_identifier_to_cover_url(db)
         return url
+    # }}}
 
-    def identify(self, log, result_queue, abort, title=None, authors=None,identifiers={}, timeout=30):
+    def identify(self, log, result_queue, abort, title=None, authors=None,identifiers={}, timeout=30): # {{{
         
         is_exhentai = self.ExHentai_Status
         query = self.create_query(log,title=title, authors=authors,identifiers=identifiers,is_exhentai=is_exhentai)
@@ -219,8 +268,7 @@ class Ehentai(Source):
             return as_unicode(e)
         if not raw and identifiers and title and authors and not abort.is_set():
             return self.identify(log, result_queue, abort, title=title,authors=authors, timeout=timeout)
-#         set_trace()
-        if is_exhentai is True and 'https://exhentai.org/' in raw is False:
+        if is_exhentai is True and not 'https://exhentai.org/' in raw:
             log.error('The cookies for ExHentai is expired.')
             return
         gidlist = self.get_gallery_info(log,raw)
@@ -228,8 +276,9 @@ class Ehentai(Source):
             log.error('No result found.\n','query: %s' % query)
             return
         self.get_all_details(gidlist=gidlist, log=log, abort=abort, result_queue=result_queue, timeout=timeout)
+    # }}}
         
-if __name__ == '__main__':
+if __name__ == '__main__': # tests {{{
     # To run these test use: calibre-customize -b ehentai_metadata && calibre-debug -e ehentai_metadata/__init__.py
     from calibre.ebooks.metadata.sources.test import (test_identify_plugin,
         title_test, authors_test)
@@ -249,4 +298,4 @@ if __name__ == '__main__':
                 [title_test('桜の蜜', exact=False)]
             )
     ])
-    
+# }}}
