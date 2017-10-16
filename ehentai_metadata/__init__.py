@@ -15,7 +15,7 @@ import re
 import json
 from urllib import urlencode
 
-def to_metadata(log,gmetadata): # {{{
+def to_metadata(log,gmetadata,ExHentai_Status): # {{{
     title = gmetadata['title']
     title_jpn = gmetadata['title_jpn']
     tags = gmetadata['tags']
@@ -43,7 +43,7 @@ def to_metadata(log,gmetadata): # {{{
     authors = [(author)]
         
     mi = Metadata(title_, authors)
-    mi.identifiers = {'ehentai':'%s_%s' % (str(gid),str(token))}
+    mi.identifiers = {'ehentai':'%s_%s_%d' % (str(gid),str(token),int(ExHentai_Status))}
     
     # publisher
     pat2 = re.compile(r'^\(([^\[\]\(\)]*)\)')
@@ -88,7 +88,7 @@ class Ehentai(Source):
     
     name = 'E-hentai Galleries'
     author = 'Wu yuan'
-    version = (1,1,0)
+    version = (1,1,1)
     minimum_calibre_version = (2, 80, 0)
     
     description = _('Download metadata and cover from e-hentai.org.'
@@ -195,7 +195,7 @@ class Ehentai(Source):
         gmetadatas = json.loads(raw)['gmetadata']
         for relevance, gmetadata in enumerate(gmetadatas):
             try:
-                ans = to_metadata(log, gmetadata)
+                ans = to_metadata(log, gmetadata,self.ExHentai_Status)
                 if isinstance(ans, Metadata):
                     ans.source_relevance = relevance
                     db = ans.identifiers['ehentai']
@@ -212,9 +212,11 @@ class Ehentai(Source):
     def get_book_url(self, identifiers): # {{{
         
         db = identifiers.get('ehentai',None)
+        d = {'0':False,'1':True}
         if db is not None:
-            gid,token = re.split('_', db)
-            if self.ExHentai_Status is True:
+            gid,token,s = re.split('_', db)
+            ExHentai_Status = d[str(s)]
+            if ExHentai_Status:
                 url = self.ExHentai_url % (gid,token)
             else:
                 url = self.EHentai_url % (gid,token)

@@ -110,3 +110,4 @@ calibre
 example/
 .project
 .pydevproject
+tmp/
