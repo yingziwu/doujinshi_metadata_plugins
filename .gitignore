@@ -111,3 +111,4 @@ example/
 .project
 .pydevproject
 tmp/
+/.recommenders/
