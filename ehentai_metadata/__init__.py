@@ -63,9 +63,9 @@ def to_metadata(log,gmetadata,ExHentai_Status): # {{{
                 mi.language = tag_
             else:
                 tags_.append(tag_)
-        elif re.match('parody|group|character|artist', tag):
-            log('drop tag %s' % tag)
-            continue
+#         elif re.match('parody|group|character|artist', tag):
+#             log('drop tag %s' % tag)
+#             continue
         elif not ':' in tag:
             log('drop tag %s' % tag)
             continue
@@ -88,7 +88,7 @@ class Ehentai(Source):
     
     name = 'E-hentai Galleries'
     author = 'Wu yuan'
-    version = (1,1,1)
+    version = (1,1,2)
     minimum_calibre_version = (2, 80, 0)
     
     description = _('Download metadata and cover from e-hentai.org.'
@@ -270,9 +270,14 @@ class Ehentai(Source):
             return as_unicode(e)
         if not raw and identifiers and title and authors and not abort.is_set():
             return self.identify(log, result_queue, abort, title=title,authors=authors, timeout=timeout)
-        if is_exhentai is True and not 'https://exhentai.org/' in raw:
-            log.error('The cookies for ExHentai is expired.')
-            return
+        if is_exhentai is True: 
+            try:
+                'https://exhentai.org/' in raw
+            except Exception as e:
+                log.error('The cookies for ExHentai is invalid.')
+                log.error('Exhentai cookies:')
+                log.error(self.ExHentai_Cookies)
+                return
         gidlist = self.get_gallery_info(log,raw)
         if not gidlist:
             log.error('No result found.\n','query: %s' % query)
