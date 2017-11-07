@@ -112,3 +112,7 @@ example/
 .pydevproject
 tmp/
 /.recommenders/
+
+# macOS
+.DS_Store
+.vscode
