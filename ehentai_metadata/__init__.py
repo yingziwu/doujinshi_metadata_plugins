@@ -87,8 +87,8 @@ def to_metadata(log,gmetadata,ExHentai_Status): # {{{
 class Ehentai(Source):
     
     name = 'E-hentai Galleries'
-    author = 'Wu yuan'
-    version = (1,1,2)
+    author = 'Wu yuan, cssxsh'
+    version = (1,1,3)
     minimum_calibre_version = (2, 80, 0)
     
     description = _('Download metadata and cover from e-hentai.org.'
@@ -108,7 +108,13 @@ class Ehentai(Source):
         Option('ipb_member_id','string',None,_('ipb_member_id'),
                _('If Use Exhentai is True, please input your cookies.')),
         Option('ipb_pass_hash','string',None,_('ipb_pass_hash'),
-               _('If Use Exhentai is True, please input your cookies.'))
+               _('If Use Exhentai is True, please input your cookies.')),
+        Option('igneous','string',None,_('igneous'),
+               _('If Use Exhentai is True, please input your cookies.')),
+        Option('Use_Proxy','bool',False,_('Use Proxy'),
+               _('If Use Proxy is True, the plugin will search metadata by proxy.')),
+        Option('link','string',None,_('link'), # username:password@proxy.com:8888
+               _('If Use Proxy is True, please input your proxy. example: username:password@proxy.com:8888')),
                )
     
     config_help_message = ('<p>'+_('To Download Metadata from exhentai.org you must sign up'
@@ -118,13 +124,15 @@ class Ehentai(Source):
     def __init__(self, *args, **kwargs): # {{{
         Source.__init__(self, *args, **kwargs)
         self.config_exhentai()
+        self.config_proxy()
     # }}}
 
     def config_exhentai(self): # {{{
         
         ExHentai_Status = self.prefs['Use_Exhentai']
         ExHentai_Cookies = [{'name':'ipb_member_id', 'value':self.prefs['ipb_member_id'], 'domain':'.exhentai.org', 'path':'/'},
-                            {'name':'ipb_pass_hash', 'value':self.prefs['ipb_pass_hash'], 'domain':'.exhentai.org', 'path':'/'}]
+                            {'name':'ipb_pass_hash', 'value':self.prefs['ipb_pass_hash'], 'domain':'.exhentai.org', 'path':'/'},
+                            {'name':'igneous', 'value':self.prefs['igneous'], 'domain':'.exhentai.org', 'path':'/'},]
         
         if ExHentai_Status is True:
             for cookie in ExHentai_Cookies:
@@ -135,6 +143,14 @@ class Ehentai(Source):
         self.ExHentai_Status = ExHentai_Status
         self.ExHentai_Cookies = ExHentai_Cookies
         return
+    # }}}
+
+    def config_proxy(self): # {{{
+        
+        Proxy_Status = self.prefs['Use_Proxy']
+        Proxy = {'https': self.prefs['link'], 'http': self.prefs['link']}
+        self.Proxy_Status = Proxy_Status
+        self.Proxy = Proxy
     # }}}
     
     def create_query(self,log,title=None, authors=None,identifiers={},is_exhentai=False): # {{{
@@ -184,11 +200,25 @@ class Ehentai(Source):
     def get_all_details(self,gidlist,log,abort,result_queue,timeout): # {{{
         
         EHentai_API_url = 'https://api.e-hentai.org/api.php'
+        ExHentai_API_url = 'https://exhentai.org/api.php'
+        
+        is_exhentai = self.ExHentai_Status
+        use_proxy = self.Proxy_Status
+        proxy = self.Proxy
+        url = EHentai_API_url
         br = self.browser
+        if is_exhentai is True:
+            url = ExHentai_API_url
+        if use_proxy is True:
+            def proxy_bypass(hostname):
+                log(hostname + ' by proxy')
+                return True
+            br.set_proxies(proxy,proxy_bypass)
         data = {"method": "gdata","gidlist": gidlist,"namespace": 1}
         data = json.dumps(data)
         try:
-            raw = br.open_novisit(EHentai_API_url,data=data,timeout=timeout).read()
+            _raw = br.open_novisit(url,timeout=timeout)
+            raw = _raw.read()
         except Exception as e:
             log.exception('Failed to make api request.',e)
             return
@@ -254,11 +284,18 @@ class Ehentai(Source):
     def identify(self, log, result_queue, abort, title=None, authors=None,identifiers={}, timeout=30): # {{{
         
         is_exhentai = self.ExHentai_Status
+        use_proxy = self.Proxy_Status
+        proxy = self.Proxy
         query = self.create_query(log,title=title, authors=authors,identifiers=identifiers,is_exhentai=is_exhentai)
         if not query:
             log.error('Insufficient metadata to construct query')
             return
         br = self.browser
+        if use_proxy is True:
+            def proxy_bypass(hostname):
+                log(hostname + ' by proxy')
+                return True
+            br.set_proxies(proxy,proxy_bypass)
         if is_exhentai is True:
             for cookie in self.ExHentai_Cookies:
                 br.set_cookie(name=cookie['name'], value=cookie['value'], domain=cookie['domain'], path=cookie['path'])
