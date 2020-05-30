@@ -217,7 +217,7 @@ class Ehentai(Source):
         data = {"method": "gdata","gidlist": gidlist,"namespace": 1}
         data = json.dumps(data)
         try:
-            _raw = br.open_novisit(url,timeout=timeout)
+            _raw = br.open_novisit(url,data=data,timeout=timeout)
             raw = _raw.read()
         except Exception as e:
             log.exception('Failed to make api request.',e)
