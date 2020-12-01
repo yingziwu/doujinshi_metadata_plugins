@@ -13,7 +13,7 @@ from calibre import as_unicode
 
 import re
 import json
-from urllib import urlencode
+from urllib.parse import urlencode
 
 def to_metadata(log,gmetadata,ExHentai_Status): # {{{
     title = gmetadata['title']
@@ -264,7 +264,7 @@ class Ehentai(Source):
                 br.set_cookie(name=cookie['name'], value=cookie['value'], domain=cookie['domain'], path=cookie['path'])
         try:
             _raw = br.open_novisit(query,timeout=timeout)
-            raw = _raw.read()
+            raw = str(_raw.read())
         except Exception as e:
             log.exception('Failed to make identify query: %r'%query)
             return as_unicode(e)
