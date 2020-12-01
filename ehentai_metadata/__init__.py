@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 # vim:fileencoding=UTF-8:ts=4:sw=4:sta:et:sts=4:ai
 from __future__ import (unicode_literals, division, absolute_import,
                         print_function)
@@ -154,8 +154,7 @@ class Ehentai(Source):
             if author_token:
                 q = q + (' ' if q != '' else '') + build_term('author', author_token)
         q = q.strip()
-        if isinstance(q, unicode):
-            q = q.encode('utf-8')
+        
         if not q:
             return None
         q_dict = {'f_doujinshi':1, 'f_manga':1, 'f_artistcg':1, 'f_gamecg':1, 'f_western':1, 'f_non-h':1,
