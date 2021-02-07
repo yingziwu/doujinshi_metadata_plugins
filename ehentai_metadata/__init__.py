@@ -171,6 +171,7 @@ class Ehentai(Source):
     def get_gallery_info(self,log,raw): # {{{
         
         pattern = re.compile(r'https:\/\/(?:e-hentai\.org|exhentai\.org)\/g\/(?P<gallery_id>\d+)/(?P<gallery_token>\w+)/')
+        raw = raw.decode('utf-8')
         results = re.findall(pattern,raw)
         if not results:
             log.exception('Failed to get gallery_id and gallery_token!')
