@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 # vim:fileencoding=UTF-8:ts=4:sw=4:sta:et:sts=4:ai
 from __future__ import (unicode_literals, division, absolute_import,
                         print_function)
@@ -13,7 +13,7 @@ from calibre import as_unicode
 
 import re
 import json
-from urllib import urlencode
+from urllib.parse import urlencode
 
 def to_metadata(log,gmetadata,ExHentai_Status): # {{{
     title = gmetadata['title']
@@ -108,9 +108,21 @@ class Ehentai(Source):
         Option('ipb_member_id','string',None,_('ipb_member_id'),
                _('If Use Exhentai is True, please input your cookies.')),
         Option('ipb_pass_hash','string',None,_('ipb_pass_hash'),
-               _('If Use Exhentai is True, please input your cookies.'))
+               _('If Use Exhentai is True, please input your cookies.')),
+        Option('igneous','string',None,_('igneous'),
+               _('If Use Exhentai is True, please input your cookies.')),
+        Option('hath_perks','string',None,_('hath_perks'),
+               _('If Use Exhentai is True, please input your cookies.')),
+        Option('sk','string',None,_('sk'),
+               _('If Use Exhentai is True, please input your cookies.')),
+        Option('star','string',None,_('star'),
+               _('If Use Exhentai is True, please input your cookies.')),
+        Option('Use_Proxy','bool',False,_('Use Proxy'),
+               _('If Use Proxy is True, the plugin will search metadata by proxy.')),
+        Option('link','string',None,_('link'), # username:password@proxy.com:8888
+               _('If Use Proxy is True, please input your proxy. example: username:password@proxy.com:8888')),
                )
-    
+
     config_help_message = ('<p>'+_('To Download Metadata from exhentai.org you must sign up'
                             ' a free account and get the cookies of .exhentai.org.'
                             ' If you don\'t have an account, you can <a href="%s">sign up</a>.')) % 'https://forums.e-hentai.org/index.php'
@@ -118,14 +130,19 @@ class Ehentai(Source):
     def __init__(self, *args, **kwargs): # {{{
         Source.__init__(self, *args, **kwargs)
         self.config_exhentai()
+        self.config_proxy()
     # }}}
 
     def config_exhentai(self): # {{{
-        
+
         ExHentai_Status = self.prefs['Use_Exhentai']
         ExHentai_Cookies = [{'name':'ipb_member_id', 'value':self.prefs['ipb_member_id'], 'domain':'.exhentai.org', 'path':'/'},
-                            {'name':'ipb_pass_hash', 'value':self.prefs['ipb_pass_hash'], 'domain':'.exhentai.org', 'path':'/'}]
-        
+                            {'name':'ipb_pass_hash', 'value':self.prefs['ipb_pass_hash'], 'domain':'.exhentai.org', 'path':'/'},
+                            {'name':'igneous', 'value':self.prefs['igneous'], 'domain':'.exhentai.org', 'path':'/'},
+                            {'name':'hath_perks', 'value':self.prefs['hath_perks'], 'domain':'.exhentai.org', 'path':'/'},
+                            {'name':'sk', 'value':self.prefs['sk'], 'domain':'.exhentai.org', 'path':'/'},
+                            {'name':'star', 'value':self.prefs['star'], 'domain':'.exhentai.org', 'path':'/'},]
+
         if ExHentai_Status is True:
             for cookie in ExHentai_Cookies:
                 if cookie['value'] is None:
@@ -136,9 +153,17 @@ class Ehentai(Source):
         self.ExHentai_Cookies = ExHentai_Cookies
         return
     # }}}
-    
+
+    def config_proxy(self): # {{{
+
+        Proxy_Status = self.prefs['Use_Proxy']
+        Proxy = {'https': self.prefs['link'], 'http': self.prefs['link']}
+        self.Proxy_Status = Proxy_Status
+        self.Proxy = Proxy
+    # }}}
+
     def create_query(self,log,title=None, authors=None,identifiers={},is_exhentai=False): # {{{
-                
+
         EHentai_SEARCH_URL = 'https://e-hentai.org/?'
         ExHentai_SEARCH_URL = 'https://exhentai.org/?'
         
@@ -154,8 +179,7 @@ class Ehentai(Source):
             if author_token:
                 q = q + (' ' if q != '' else '') + build_term('author', author_token)
         q = q.strip()
-        if isinstance(q, unicode):
-            q = q.encode('utf-8')
+
         if not q:
             return None
         q_dict = {'f_doujinshi':1, 'f_manga':1, 'f_artistcg':1, 'f_gamecg':1, 'f_western':1, 'f_non-h':1,
@@ -182,13 +206,27 @@ class Ehentai(Source):
     # }}}
     
     def get_all_details(self,gidlist,log,abort,result_queue,timeout): # {{{
-        
+
         EHentai_API_url = 'https://api.e-hentai.org/api.php'
+        ExHentai_API_url = 'https://exhentai.org/api.php'
+
+        is_exhentai = self.ExHentai_Status
+        use_proxy = self.Proxy_Status
+        proxy = self.Proxy
+        url = EHentai_API_url
         br = self.browser
+        if is_exhentai is True:
+            url = ExHentai_API_url
+        if use_proxy is True:
+            def proxy_bypass(hostname):
+                log(hostname + ' by proxy')
+                return True
+            br.set_proxies(proxy,proxy_bypass)
         data = {"method": "gdata","gidlist": gidlist,"namespace": 1}
         data = json.dumps(data)
         try:
-            raw = br.open_novisit(EHentai_API_url,data=data,timeout=timeout).read()
+            _raw = br.open_novisit(url,data=data,timeout=timeout)
+            raw = _raw.read()
         except Exception as e:
             log.exception('Failed to make api request.',e)
             return
@@ -222,9 +260,7 @@ class Ehentai(Source):
                 url = self.EHentai_url % (gid,token)
             return ('ehentai', db, url)
     # }}}
-
     def download_cover(self, log, result_queue, abort,title=None, authors=None, identifiers={}, timeout=30, get_best_cover=False): # {{{
-
         cached_url = self.get_cached_cover_url(identifiers)
         if cached_url is None:
             return
@@ -239,7 +275,6 @@ class Ehentai(Source):
         except:
             log.exception('Failed to download cover from:', cached_url)
     # }}}
-
     def get_cached_cover_url(self, identifiers): # {{{
         
         url = None
@@ -250,21 +285,27 @@ class Ehentai(Source):
             url = self.cached_identifier_to_cover_url(db)
         return url
     # }}}
-
     def identify(self, log, result_queue, abort, title=None, authors=None,identifiers={}, timeout=30): # {{{
-        
+
         is_exhentai = self.ExHentai_Status
+        use_proxy = self.Proxy_Status
+        proxy = self.Proxy
         query = self.create_query(log,title=title, authors=authors,identifiers=identifiers,is_exhentai=is_exhentai)
         if not query:
             log.error('Insufficient metadata to construct query')
             return
         br = self.browser
+        if use_proxy is True:
+            def proxy_bypass(hostname):
+                log(hostname + ' by proxy')
+                return True
+            br.set_proxies(proxy,proxy_bypass)
         if is_exhentai is True:
             for cookie in self.ExHentai_Cookies:
                 br.set_cookie(name=cookie['name'], value=cookie['value'], domain=cookie['domain'], path=cookie['path'])
         try:
             _raw = br.open_novisit(query,timeout=timeout)
-            raw = _raw.read()
+            raw = str(_raw.read())
         except Exception as e:
             log.exception('Failed to make identify query: %r'%query)
             return as_unicode(e)
@@ -289,7 +330,6 @@ if __name__ == '__main__': # tests {{{
     # To run these test use: calibre-customize -b ehentai_metadata && calibre-debug -e ehentai_metadata/__init__.py
     from calibre.ebooks.metadata.sources.test import (test_identify_plugin,
         title_test, authors_test)
-
     test_identify_plugin(Ehentai.name,
         [
             (
